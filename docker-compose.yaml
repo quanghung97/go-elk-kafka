@@ -1,0 +1,107 @@
+version: '3'
+services:
+#KAFKA
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.3.2
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+    ports:
+      - 2181:2181
+
+  kafka:
+    image: confluentinc/cp-kafka:7.3.2
+    depends_on:
+      - zookeeper
+    ports:
+      - 9092:9092
+    volumes:
+      - ./data/kafka1/data:/var/lib/kafka/data
+      - ./data/kafka1/etc:/etc/kafka
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+        
+  control-center:
+    image: confluentinc/cp-enterprise-control-center:7.3.2
+    hostname: control-center
+    depends_on:
+      - kafka
+    ports:
+      - "9021:9021"
+    environment:
+      CONTROL_CENTER_BOOTSTRAP_SERVERS: 'kafka:29092'
+      CONTROL_CENTER_REPLICATION_FACTOR: 1
+      PORT: 9021
+
+#ELK
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.7.0
+    volumes:
+      - ./elasticsearch:/usr/share/elasticsearch/data
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: false
+    ports:
+      - 9200:9200
+      - 9300:9300
+    restart: unless-stopped
+    labels:
+      co.elastic.logs/enabled: false
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.7.0
+    environment:
+      ELASTICSEARCH_HOSTS: '["http://elasticsearch:9200"]'
+    ports:
+      - 5601:5601
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+    labels:
+      co.elastic.logs/enabled: false
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.7.0
+    volumes:
+      - ./logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+    ports:
+      - 5044:5044
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+    labels:
+      co.elastic.logs/enabled: false
+
+  filebeat:
+    image: docker.elastic.co/beats/filebeat:8.7.0
+    user: root
+    volumes:
+      - ./filebeat/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - logstash
+    command: filebeat -e -strict.perms=false
+    restart: unless-stopped
+    labels:
+      co.elastic.logs/enabled: false
+      co.elastic.logs/json.overwrite_keys: true 
+      co.elastic.logs/json.add_error_key: true 
+      co.elastic.logs/json.expand_keys: true 
+
+  logger:
+    build:
+      context: .
+      args:
+        GIT_LAB_KEY: ${GIT_LAB_KEY}
+      dockerfile: Dockerfile
+    labels:
+      co.elastic.logs/enabled: true
+    depends_on:
+      - kafka
+
