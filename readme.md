@@ -35,7 +35,7 @@ func testLog(msg string, a ...interface{}) {
 
 func main() {
 	defer configKafka.ProducerWriter.Close()
-	fmt.Println(constants.PACKAGE_KAFKA_BAV_WRITER_SEND_MESSAGE + "start producing ... !!")
+	fmt.Println(constants.PACKAGE_KAFKA_WRITER_SEND_MESSAGE + "start producing ... !!")
 	for i := 0; ; i++ {
 		key := fmt.Sprintf("Key-%d", i)
 		configKafka.WriterSendMessage("topic-hub-logs", key, fmt.Sprint(uuid.New()), testLog)
